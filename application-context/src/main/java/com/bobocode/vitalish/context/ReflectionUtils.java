@@ -36,9 +36,9 @@ public final class ReflectionUtils {
         return beanName;
     }
 
-    public static Object newInstance(Class<?> clazz) throws RuntimeException {
+    public static Object newInstance(BeanDefinition<?> beanDefinition) throws RuntimeException {
         try {
-            Constructor<?> constructor = Arrays.stream(clazz.getConstructors())
+            Constructor<?> constructor = Arrays.stream(beanDefinition.clazz().getConstructors())
                     .filter(c -> c.getParameterCount() == 0)
                     .findFirst().orElseThrow();
             return constructor.newInstance();
