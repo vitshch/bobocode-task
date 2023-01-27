@@ -1,39 +1,32 @@
 package com.bobocode.vitalish.context;
 
 import com.bobocode.vitalish.context.annotation.Autowired;
-import com.bobocode.vitalish.context.annotation.Bean;
+import com.bobocode.vitalish.context.exception.BeanPostProcessorException;
 import com.bobocode.vitalish.context.exception.NoSuchBeanException;
 import com.bobocode.vitalish.context.exception.NoUniqueBeanException;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class AnnotationConfigApplicationContext implements ApplicationContext {
 
-    private final String packageName;
-    private final Map<String, Object> context = new HashMap<>();
+    private final Map<String, Object> context = new ConcurrentHashMap<>();
     private Set<BeanDefinition<?>> beanDefinitions;
 
     public AnnotationConfigApplicationContext(String packageName) {
-        this.packageName = packageName;
-        scanPackage();
+        createBeanDefinitions(packageName);
         createBeanInstances();
         injectDependencies();
     }
 
-    private void scanPackage() {
-        InputStream resourceStream = ClassLoader.getSystemClassLoader()
-                .getResourceAsStream(packageName.replaceAll("[.]", "/"));
-        BufferedReader reader = new BufferedReader(new InputStreamReader(resourceStream));
-        this.beanDefinitions = reader.lines()
-                .filter(ReflectionUtils::isClass)
-                .map(ReflectionUtils::getClassName)
-                .map(className -> ReflectionUtils.getClass(packageName, className))
-                .filter(clazz -> clazz.isAnnotationPresent(Bean.class))
+    private void createBeanDefinitions(String packageName) {
+        Set<Class<?>> beanClasses = ContextUtils.scanPackage(packageName);
+        this.beanDefinitions = beanClasses.stream()
                 .map(this::createBeanDefinition)
                 .collect(Collectors.toSet());
     }
@@ -56,10 +49,9 @@ public class AnnotationConfigApplicationContext implements ApplicationContext {
     }
 
     private void injectDependencies() {
-        Set<BeanDefinition<?>> definitionsToInject = beanDefinitions.stream()
+        beanDefinitions.stream()
                 .filter(beanDefinition -> !beanDefinition.autowiredFields().isEmpty())
-                .collect(Collectors.toSet());
-        definitionsToInject.forEach(this::injectDependency);
+                .forEach(this::injectDependency);
     }
 
     private <T> void injectDependency(BeanDefinition<T> beanDefinition) {
@@ -70,8 +62,7 @@ public class AnnotationConfigApplicationContext implements ApplicationContext {
                 field.set(bean, getBean(field.getType()));
             }
         } catch (IllegalAccessException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+            throw new BeanPostProcessorException("Unable to set Bean dependency", e);
         }
     }
 
